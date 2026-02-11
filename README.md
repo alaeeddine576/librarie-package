@@ -39,18 +39,20 @@ New Angular projects use a `public` folder instead of `src/assets`.
 2.  Ensure `src/assets` is declared in your `angular.json` under `"assets"`.
 3.  Place your files there.
 like this:
- ```"assets": [
-              {
-                "glob": "**/*",
-                "input": "public"
-              },
-              "src/assets"
-            ],
-            ```
+
+```json
+"assets": [
+  {
+    "glob": "**/*",
+    "input": "public"
+  },
+  "src/assets"
+],
+```
 
 #### File Content Example
 **config.json**:
-    ```json
+```json
     {
         "version": "1",
         "active_languages": ["en", "fr", "es"],
@@ -59,8 +61,9 @@ like this:
     ```
 
 3.  Add your translation files (e.g., `en.v1.json`, `fr.v1.json`) in the same folder:
-    **src/assets/i18n/en.v1.json**
-    ```json
+    
+**src/assets/i18n/en.v1.json**
+```json
     {
         "HOME": {
             "TITLE": "Hello World",
