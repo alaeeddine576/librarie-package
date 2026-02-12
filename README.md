@@ -129,7 +129,11 @@ Update your `src/app/app.component.html` to display translated text.
 ```html
 <div style="text-align: center; margin-top: 50px;">
   <h1>{{ 'HOME.TITLE' | translate }}</h1>
+  <h1>{{ 'HOME.TITLE' | translate }}</h1>
   <h3>{{ 'HOME.SUBTITLE' | translate }}</h3>
+
+  <!-- Exemple avec Paramètres Dynamiques -->
+  <p>{{ 'WELCOME_MSG' | translate: { name: 'Alae' } }}</p>
 
   <div style="margin-top: 20px;">
     <button (click)="changeLanguage('en')">English</button>
