@@ -1,6 +1,6 @@
 import { __awaiter } from 'tslib';
 import * as i0 from '@angular/core';
-import { inject, Injectable, ChangeDetectorRef, Pipe } from '@angular/core';
+import { inject, Injectable, Pipe } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, firstValueFrom } from 'rxjs';
 
@@ -99,32 +99,39 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "15.2.10", ngImpo
 class TranslatePipe {
     constructor() {
         this.wordingService = inject(WordingService);
-        this.cdr = inject(ChangeDetectorRef);
-        // We subscribe to translation updates
-        this.sub = this.wordingService.translations$.subscribe(() => {
-            // When translations change (language switch), we force the pipe to re-evaluate
-            this.cdr.markForCheck();
-        });
     }
     transform(key, params) {
-        return this.wordingService.get(key, params);
-    }
-    ngOnDestroy() {
-        if (this.sub) {
-            this.sub.unsubscribe();
+        const currentLang = this.wordingService.currentLang$.value;
+        const currentTranslations = this.wordingService.translations$.value;
+        const currentParamsStr = params ? JSON.stringify(params) : undefined;
+        // 1. Check if anything changed (Inputs OR Global State)
+        if (key === this.lastKey &&
+            currentParamsStr === this.lastParams &&
+            currentLang === this.lastLang &&
+            currentTranslations === this.lastTranslations) { // Essential: check if data arrived!
+            return this.lastResult; // Return cached result (Performance optimized)
         }
+        // 2. If changed, recalculate
+        const result = this.wordingService.get(key, params);
+        // 3. Update Cache
+        this.lastKey = key;
+        this.lastParams = currentParamsStr;
+        this.lastLang = currentLang;
+        this.lastTranslations = currentTranslations;
+        this.lastResult = result;
+        return result;
     }
 }
 TranslatePipe.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "15.2.10", ngImport: i0, type: TranslatePipe, deps: [], target: i0.ɵɵFactoryTarget.Pipe });
-TranslatePipe.ɵpipe = i0.ɵɵngDeclarePipe({ minVersion: "14.0.0", version: "15.2.10", ngImport: i0, type: TranslatePipe, isStandalone: true, name: "translate" });
+TranslatePipe.ɵpipe = i0.ɵɵngDeclarePipe({ minVersion: "14.0.0", version: "15.2.10", ngImport: i0, type: TranslatePipe, isStandalone: true, name: "translate", pure: false });
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "15.2.10", ngImport: i0, type: TranslatePipe, decorators: [{
             type: Pipe,
             args: [{
                     name: 'translate',
                     standalone: true,
-                    pure: true // Optimization: Only runs when input changes or we manually trigger it
+                    pure: false // Standard ngx-translate approach: ensures updates always happen
                 }]
-        }], ctorParameters: function () { return []; } });
+        }] });
 
 /*
  * Public API Surface of wording-lib
