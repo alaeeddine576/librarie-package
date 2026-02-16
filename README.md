@@ -1,123 +1,137 @@
 # Wording Library (wording-lib)
 
-This library provides a simple and consistent way to manage translations in your Angular applications. It includes a `WordingService` for loading JSON translation files and a `TranslatePipe` for using them in your templates.
+A robust Angular library for managing translations with versioning, caching, and `APP_INITIALIZER` support for high performance.
 
 ## 🚀 Quick Start Guide
 
-Follow these steps to integrate `wording-lib` into a new Angular project.
+### 1. Install the Library
 
-### 1. Create a New Angular Project (Optional)
-
-If you don't have a project yet, create one:
+Copy the `wording-lib-0.0.1.tgz` package file to the root of your project and run:
 
 ```bash
-ng new my-new-app --standalone
-cd my-new-app
+npm install ./wording-lib-0.0.1.tgz --legacy-peer-deps
 ```
 
-### 2. Install the Library
+### 2. Setup Translation Files
 
-Copy the `wording-lib-0.0.1.tgz` package file to the root of your new project. Then run:
+Create a folder `src/assets/i18n` and add your configuration and translation files.
 
-```bash
-npm install ./wording-lib-0.0.1.tgz
-```
-
-### 3. Setup Translation Files
-
-The library fetches translation files from **`/assets/i18n`**.
-
-#### Option A: Angular 17+ (Recommended for New Projects)
-New Angular projects use a `public` folder instead of `src/assets`.
-1.  Go to your `public` folder.
-2.  Create the folders: `public/assets/i18n`.
-3.  Place your `config.json` and translation `.json` files there.
-    *   *Result:* The files will be accessible at `http://.../assets/i18n/config.json`, and the library will find them automatically. **No angular.json changes needed.**
-
-#### Option B: Older Angular versions (src/assets)
-1.  Create `src/assets/i18n`.
-2.  Ensure `src/assets` is declared in your `angular.json` under `"assets"`.
-3.  Place your files there.
-like this:
-
+**src/assets/i18n/config.json** (Required):
 ```json
-"assets": [
-  {
-    "glob": "**/*",
-    "input": "public"
-  },
-  "src/assets"
-],
+{
+    "version": "1",
+    "active_languages": ["en", "fr"],
+    "default_lang": "en"
+}
 ```
 
-#### File Content Example
-**config.json**:
+**src/assets/i18n/en.v1.json**:
 ```json
-    {
-        "version": "1",
-        "active_languages": ["en", "fr", "es"],
-        "default_lang": "en"
+{
+    "HOME": {
+        "TITLE": "Hello World"
     }
-    ```
+}
+```
 
-3.  Add your translation files (e.g., `en.v1.json`, `fr.v1.json`) in the same folder:
-    
-**src/assets/i18n/en.v1.json**
-```json
-    {
-        "HOME": {
-            "TITLE": "Hello World",
-            "SUBTITLE": "This is a test"
-        }
-    }
-    ```
+### 3. Configure Application (Critical Step)
 
-### 4. Verify App Config (Important for Angular 17+)
-If you are using a Standalone application (default in Angular 19), you must provide `HttpClient`.
+To ensure translations are loaded **before** the app starts (preventing flickering/LCP issues), you must use `APP_INITIALIZER`.
 
-Open `src/app/app.config.ts`:
+#### For Standalone Applications (Angular 15+)
+Update your `src/main.ts`:
+
 ```typescript
-import { ApplicationConfig } from '@angular/core';
-import { provideRouter } from '@angular/router';
-import { routes } from './app.routes';
-import { provideHttpClient } from '@angular/common/http'; // <--- Import this
+import { bootstrapApplication } from '@angular/platform-browser';
+import { AppComponent } from './app/app.component';
+import { importProvidersFrom, APP_INITIALIZER } from '@angular/core';
+import { HttpClientModule } from '@angular/common/http';
+import { TranslateModule, TranslateLoader } from '@ngx-translate/core';
+import { WordingService } from 'wording-lib'; // Import from library
 
-export const appConfig: ApplicationConfig = {
+bootstrapApplication(AppComponent, {
   providers: [
-    provideRouter(routes),
-    provideHttpClient() // <--- Add this
+    importProvidersFrom(
+      HttpClientModule,
+      TranslateModule.forRoot({
+        loader: {
+          provide: TranslateLoader,
+          useClass: WordingService
+        }
+      })
+    ),
+    // Initialize WordingService before the app starts
+    {
+      provide: APP_INITIALIZER,
+      useFactory: (service: WordingService) => () => service.loadConfig(),
+      deps: [WordingService],
+      multi: true
+    }
   ]
-};
+}).catch(err => console.error(err));
 ```
 
-### 5. Integrate into Your Application
-
-Update your `src/app/app.component.ts` to use the library.
+#### For Module-based Applications (Legacy)
+Update your `app.module.ts`:
 
 ```typescript
-import { Component, inject, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { TranslatePipe, WordingService } from 'wording-lib'; // Import from library
+// ... imports
+import { APP_INITIALIZER } from '@angular/core';
+import { WordingService } from 'wording-lib';
+import { TranslateModule, TranslateLoader } from '@ngx-translate/core';
+
+export function initializeApp(wordingService: WordingService) {
+  return () => wordingService.loadConfig();
+}
+
+@NgModule({
+  imports: [
+    HttpClientModule,
+    TranslateModule.forRoot({
+      loader: {
+        provide: TranslateLoader,
+        useClass: WordingService
+      }
+    })
+  ],
+  providers: [
+    {
+      provide: APP_INITIALIZER,
+      useFactory: initializeApp,
+      deps: [WordingService],
+      multi: true
+    }
+  ],
+  bootstrap: [AppComponent]
+})
+export class AppModule { }
+```
+
+### 4. Use in Components
+
+**src/app/app.component.ts**:
+```typescript
+import { Component } from '@angular/core';
+import { TranslateService, TranslateModule } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, TranslatePipe], // Add TranslatePipe to imports
-  templateUrl: './app.component.html',
-  styleUrls: ['./app.component.css']
+  imports: [TranslateModule], 
+  template: `
+    <h1>{{ 'HOME.TITLE' | translate }}</h1>
+    <button (click)="switchLang('fr')">FR</button>
+  `
 })
-export class AppComponent implements OnInit {
-  private wordingService = inject(WordingService);
-
-  ngOnInit() {
-    // Initialize the translation service on startup
-    // It will automatically load files from /assets/i18n
-    this.wordingService.initWording(); 
+export class AppComponent {
+  constructor(private translate: TranslateService) {
+    // Default lang is handled by WordingService, but you can force it here if needed
+    translate.setDefaultLang('en');
+    translate.use('en');
   }
 
-  // Helper method to switch languages
-  changeLanguage(lang: string) {
-    this.wordingService.switchLanguage(lang);
+  switchLang(lang: string) {
+    this.translate.use(lang);
   }
 }
 ```

@@ -1,7 +1,7 @@
 import * as i0 from '@angular/core';
-import { inject, Injectable, Pipe } from '@angular/core';
+import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { BehaviorSubject, firstValueFrom } from 'rxjs';
+import { BehaviorSubject, tap, firstValueFrom, from } from 'rxjs';
 
 class WordingService {
     constructor() {
@@ -11,32 +11,56 @@ class WordingService {
         this.currentLang$ = new BehaviorSubject('en');
         // Cache en mémoire (RAM) uniquement - Plus sécurisé que localStorage
         this.memoryCache = new Map();
+        this.configSource = null; // Store config instance
+    }
+    /**
+     * Called by APP_INITIALIZER to load config before app starts
+     */
+    loadConfig() {
+        const baseUrl = '/assets/i18n';
+        return this.http.get(`${baseUrl}/config.json`).pipe(
+        // Tap into the stream to save the config
+        tap(config => this.configSource = config));
     }
     async initWording() {
+        const lang = this.currentLang$.value;
+        const data = await firstValueFrom(this.getTranslation(lang));
+        this.translations$.next(data);
+    }
+    getTranslation(lang) {
+        return from(this.loadTranslation(lang));
+    }
+    async loadTranslation(lang) {
         // Adapter l'URL selon où tu poses tes fichiers (ex: assets/i18n)
         const baseUrl = '/assets/i18n';
         try {
-            console.log('🔄 Init Wording (v15)...');
-            // Typage de la réponse HTTP
-            const config = await firstValueFrom(this.http.get(`${baseUrl}/config.json`));
+            console.log(`🔄 Loading Wording for ${lang} (v15)...`);
+            let config = this.configSource;
+            if (!config) {
+                console.warn('⚠️ Config not preloaded. Fetching now...');
+                // Typage de la réponse HTTP
+                config = await firstValueFrom(this.http.get(`${baseUrl}/config.json`));
+                this.configSource = config;
+            }
+            else {
+                console.log('✅ Using preloaded config (APP_INITIALIZER)');
+            }
             // On vérifie si on a déjà charger cette version
-            const currentLang = this.currentLang$.value;
-            const cacheKey = `wording_data_${currentLang}_v${config.version}`;
+            const cacheKey = `wording_data_${lang}_v${config.version}`;
             // Vérification du Cache Mémoire
             if (this.memoryCache.has(cacheKey)) {
                 console.log('⚡ Memory Cache Hit');
-                this.translations$.next(this.memoryCache.get(cacheKey));
-                return;
+                return this.memoryCache.get(cacheKey);
             }
             console.log('⬇️ Téléchargement request config from:', `${baseUrl}/config.json`);
-            await this.loadTranslationFromServer(config.version, baseUrl);
+            return await this.loadTranslationFromServer(config.version, baseUrl, lang);
         }
         catch (error) {
             console.error("Erreur Wording:", error);
+            return {};
         }
     }
-    async loadTranslationFromServer(version, baseUrl) {
-        const lang = this.currentLang$.value;
+    async loadTranslationFromServer(version, baseUrl, lang) {
         const cacheKey = `wording_data_${lang}_v${version}`;
         const url = `${baseUrl}/${lang}.v${version}.json`;
         console.log('Trying to load translation from:', url);
@@ -44,17 +68,18 @@ class WordingService {
             // Typage de la réponse HTTP
             const data = await firstValueFrom(this.http.get(url));
             console.log('Translation data loaded:', data);
-            this.translations$.next(data); // Mise à jour des vues
             // Sauvegarde dans le Cache Mémoire
             this.memoryCache.set(cacheKey, data);
+            return data;
         }
         catch (err) {
             console.error('Error loading translation file:', err);
+            return {};
         }
     }
     async switchLanguage(lang) {
         this.currentLang$.next(lang);
-        await this.initWording();
+        // await this.initWording(); // Let ngx-translate handle the switch via getTranslation
     }
     get(key, params) {
         const keys = key.split('.');
@@ -89,43 +114,6 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "15.2.10", ngImpo
                 }]
         }] });
 
-class TranslatePipe {
-    constructor() {
-        this.wordingService = inject(WordingService);
-    }
-    transform(key, params) {
-        const currentLang = this.wordingService.currentLang$.value;
-        const currentTranslations = this.wordingService.translations$.value;
-        const currentParamsStr = params ? JSON.stringify(params) : undefined;
-        // 1. Check if anything changed (Inputs OR Global State)
-        if (key === this.lastKey &&
-            currentParamsStr === this.lastParams &&
-            currentLang === this.lastLang &&
-            currentTranslations === this.lastTranslations) { // Essential: check if data arrived!
-            return this.lastResult; // Return cached result (Performance optimized)
-        }
-        // 2. If changed, recalculate
-        const result = this.wordingService.get(key, params);
-        // 3. Update Cache
-        this.lastKey = key;
-        this.lastParams = currentParamsStr;
-        this.lastLang = currentLang;
-        this.lastTranslations = currentTranslations;
-        this.lastResult = result;
-        return result;
-    }
-}
-TranslatePipe.ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "15.2.10", ngImport: i0, type: TranslatePipe, deps: [], target: i0.ɵɵFactoryTarget.Pipe });
-TranslatePipe.ɵpipe = i0.ɵɵngDeclarePipe({ minVersion: "14.0.0", version: "15.2.10", ngImport: i0, type: TranslatePipe, isStandalone: true, name: "translate", pure: false });
-i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "15.2.10", ngImport: i0, type: TranslatePipe, decorators: [{
-            type: Pipe,
-            args: [{
-                    name: 'translate',
-                    standalone: true,
-                    pure: false // Standard ngx-translate approach: ensures updates always happen
-                }]
-        }] });
-
 /*
  * Public API Surface of wording-lib
  */
@@ -134,5 +122,5 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "15.2.10", ngImpo
  * Generated bundle index. Do not edit.
  */
 
-export { TranslatePipe, WordingService };
+export { WordingService };
 //# sourceMappingURL=wording-lib.mjs.map
